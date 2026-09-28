@@ -1,0 +1,194 @@
+Ты — senior .NET архитектор. Сгенерируй полноценный solution на .NET 10 для сервиса сводки новостей.
+
+## ЦЕЛЬ
+Сервис работает как .NET Generic Host. Внутри:
+1. Telegram-бот принимает команды от пользователя.
+2. Юзербот на WTelegram читает новости из каналов, которые пользователь добавил через бота.
+3. Собранные новости сохраняются в файл, затем отправляются в локальную LLM через OllamaSharp.
+4. LLM делает дайджест: убирает рекламу, убирает повторы, оставляет уникальные новости.
+5. Бот отдаёт пользователю новости по одной: команда /news запускает сбор и формирует очередь, команда /next присылает ссылку на следующую новость в канале, где она была первой.
+6. Для каждого пользователя и каждого канала хранится last_date последнего запроса дайджеста.
+
+Пока пользователь один, но архитектура должна быть multi-user: у каждого пользователя свои каналы, своя история, свой last_date per channel per user, своя очередь дайджеста.
+
+## СТЕК
+- .NET 10 (net10.0)
+- Microsoft.Extensions.Hosting, DependencyInjection, Configuration, Options
+- User Secrets для секретов
+- Telegram либа для юзербота
+- Telegram.Bot для бота
+- Ollama для локальной ии
+- SQLite + EF Core для состояния (пользователи, каналы, last_date, очередь дайджеста)
+- Microsoft Logging для логирования
+- xUnit + FluentAssertions для тестов
+
+## АРХИТЕКТУРА
+Сделай solution с проектами:
+- NewsDigest.App — хост, DI, конфигурация, hosted services
+- NewsDigest.Core — домен, интерфейсы, модели, бизнес-логика
+- NewsDigest.Infrastructure — WTelegram, Telegram.Bot, OllamaSharp, EF Core, файловое хранилище
+Если так сложно — можно один проект с папками, но DI и слои должны быть явными.
+
+Основные интерфейсы:
+- IUserbotClient — обёртка над WTelegram
+- IUserbotAuthService — интерактивный логин WTelegram
+- INewsCollector — сбор getHistory по каналам с учётом last_date
+- IDigestService — подготовка данных и вызов LLM
+- INewsLinkSender — формирует и отправляет ссылку на оригинальное сообщение, с опциональным превью
+- IDigestQueueService — очередь новостей для /next
+- IUserChannelRepository, IChannelStateRepository, IDigestQueueRepository
+- IOllamaClient — обёртка над OllamaSharp
+- IBotService — обработка команд Telegram-бота
+
+DI:
+- WTelegram-клиент — Singleton
+- OllamaSharp-клиент — Singleton
+- TelegramBotClient — Singleton
+- BotHostedService — HostedService
+- Репозитории — Scoped
+- Внутри hosted service используй IServiceScopeFactory
+
+## КОНФИГУРАЦИЯ
+Через User Secrets:
+- Telegram:ApiId
+- Telegram:ApiHash
+- Telegram:PhoneNumber
+- Telegram:SessionPath
+- Telegram:BotToken
+- Ollama:Url
+- Ollama:Model
+- Storage:DatabasePath
+- Storage:BatchDirectory
+- Logging:...
+
+Сделай Options-классы с валидацией. В README напиши команды:
+dotnet user-secrets init
+dotnet user-secrets set "Telegram:ApiId" "..."
+и т.д.
+
+## АВТОРИЗАЦИЯ WTELEGRAM
+- Первичный логин выполняется интерактивно в консоли при старте хоста, если сессия отсутствует.
+- Запроси код у пользователя через Console.ReadLine.
+- Если включена 2FA — запроси пароль.
+- Сохраняй сессию в Telegram:SessionPath.
+- Если сессия уже существует — не запрашивай повторно.
+- Настрой WTelegram.Log с уровнем из конфига.
+- Оберни логин в отдельный сервис IUserbotAuthService, чтобы хост не падал при ошибке.
+
+## МОДЕЛЬ ДАННЫХ
+User: Id, TelegramUserId, CreatedAt
+UserChannel: Id, UserId, ChannelId, ChannelUsername, Title, CreatedAt
+ChannelState: Id, UserId, ChannelId, LastDigestDate, LastMessageId
+CollectedMessage: Id, UserId, ChannelId, MessageId, Date, Text, Type, NormalizedText, ContentHash, IsCanonical, DuplicateOfMessageId
+DigestQueue: Id, UserId, CreatedAt, Status, SourceBatchPath
+DigestItem: Id, DigestQueueId, OrderIndex, ChannelId, ChannelUsername, MessageId, MessageUrl, Type, PreviewText, Reason, IsSent
+Type: Text, MediaWithCaption, MediaWithoutText
+
+last_date per channel per user обновляй только после успешного сбора и успешного формирования очереди. Если /news упал — не обновляй.
+
+## КОМАНДЫ БОТА
+- /start — краткая инструкция
+- /add <@username|t.me/...|id> — добавить канал пользователю
+- /remove <@username|id> — удалить канал
+- /list — список каналов пользователя
+- /news — запустить сбор, сформировать дайджест, создать очередь
+- /next — прислать следующую новость из очереди
+- /status — статус очереди
+
+## ПОТОК /news
+1. Определи пользователя по TelegramUserId.
+2. Возьми все его каналы.
+3. Для каждого канала через Telegram вызови getHistory.
+4. Бери сообщения с датой > ChannelState.LastDigestDate.
+5. Классифицируй:
+   - есть текст -> Text
+   - есть подпись к медиа -> MediaWithCaption
+   - нет текста, но есть медиа -> MediaWithoutText
+6. Нормализуй текст: lower, trim, убрать лишние пробелы, ссылки, emoji.
+7. Посчитай ContentHash.
+8. Сгруппируй точные/почти точные дубли. Канонической считай самую раннюю новость. Остальные пометь IsCanonical=false, DuplicateOfMessageId=canonical.Id.
+9. Сохрани весь батч в JSON-файл: Storage:BatchDirectory/{userId}/{yyyyMMddHHmmss}.json
+10. Передай канонические новости в Ollama. В промпте требуй строго JSON.
+11. LLM возвращает выбранные id, рекламные id, дубликаты.
+12. Создай DigestQueue и DigestItem в порядке, который вернула LLM. Для каждого DigestItem заранее собери MessageUrl (см. ниже).
+13. Обнови ChannelState.LastDigestDate для каналов, которые успешно обработаны.
+14. Ответь пользователю: сколько новостей в дайджесте, предложи /next.
+
+## ПОТОК /next
+1. Найди активную очередь пользователя.
+2. Возьми первый неотправленный DigestItem.
+3. Отправь пользователю ссылку на оригинальное сообщение в канале.
+   Формат ссылки:
+   - для публичного канала: https://t.me/{username}/{messageId}
+   - для приватного: используй ссылку, полученную через WTelegram (если доступна), иначе укажи channelId и messageId.
+4. Опционально добавь превью: первые 200 символов текста новости (если есть).
+5. Помечай IsSent=true.
+6. Если очередь пуста — сообщи, что дайджест закончился.
+
+## ПРОМПТ ДЛЯ OLLAMA
+В коде должен быть шаблон. System:
+Ты — редактор новостного дайджеста. Ты не выдумываешь новости. Ты работаешь только с входным JSON.
+
+User:
+Ниже JSON-массив новостей. Каждая новость имеет id, channel, date, text, type.
+type: text | media_with_caption | media_without_text.
+Задача:
+1. Убери рекламу, промо, партнёрские ссылки, приглашения, скам.
+2. Убери смысловые повторы. Если несколько новостей об одном и том же — оставь одну, самую раннюю и полную.
+3. Верни строго JSON без текста вокруг:
+{
+  "selected": [{"id": "...", "reason": "..."}],
+  "ads": ["..."],
+  "duplicates": ["..."]
+}
+Не добавляй id, которых нет во входе. Не меняй id. Не пиши ничего кроме JSON.
+
+Если Ollama не умеет JSON mode — всё равно требуй JSON и парси ответ. При ошибке парсинга — retry 1 раз, затем fallback: взять все канонические не-рекламные по эвристике.
+
+## ОБРАБОТКА ОШИБОК
+- FloodWait от Telegram — логируй и жди.
+- Ошибки WTelegram — не роняй хост.
+- Ошибки Ollama — retry, потом сообщение пользователю.
+- Если ссылку сформировать нельзя (нет username и нет ссылки от WTelegram) — отправь channelId + messageId и пометь новость как IsSent с пометкой в логе.
+- Все операции — CancellationToken.
+
+## ЛОГИРОВАНИЕ
+Serilog в консоль и файл. Логируй:
+- старт/стоп
+- команды пользователя
+- сбор по каналам
+- вызов LLM
+- создание очереди
+- отправку ссылки
+- ошибки с контекстом
+
+## ТЕСТЫ
+Покрой:
+- нормализацию и ContentHash
+- выбор канонической новости
+- парсинг JSON от LLM
+- обновление last_date
+- очередь /next
+
+## ЧТО СГЕНЕРИРОВАТЬ
+1. .sln и .csproj
+2. Весь код
+3. appsettings.json с примером
+4. README.md с настройкой User Secrets, запуском Ollama, первичным логином WTelegram
+5. .gitignore
+6. Тесты
+
+## README ДОЛЖЕН СОДЕРЖАТЬ
+### Первый запуск
+1. Запусти Ollama, скачай модель: ollama pull <model>.
+2. Заполни User Secrets.
+3. Запусти приложение. В консоли введи код из Telegram и пароль 2FA (если есть).
+4. После успешного логина сессия сохранится, при следующих запусках код не потребуется.
+5. Напиши боту /start, добавь каналы через /add.
+
+## ЧЕГО НЕ ДЕЛАТЬ
+- Не делать scheduled-сбор.
+- Не делать web UI.
+- Не использовать облачные LLM.
+- Не хранить секреты в appsettings.json.
+- Не усложнять сверх MVP, но сохранить расширяемость на multi-user.

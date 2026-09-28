@@ -1,0 +1,37 @@
+## ---------- КЭШ И НАСТРОЙКИ СРЕДЫ РАЗРАБОТКИ (VISUAL STUDIO) ----------
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.ide/
+
+## ---------- РЕЗУЛЬТАТЫ СБОРКИ (BUILD OUTPUT) ----------
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+[Rr]eleases/
+x64/
+x86/
+bld/
+[Bb]in/
+[Oo]bj/
+build/
+
+## ---------- ТЕСТЫ (MSTEST, NUNIT, XUNIT) ----------
+[Tt]est[Rr]esult*/
+[Bb]uild[Ll]og.*
+TestResult.xml
+nunit-*.xml
+
+## ---------- КЭШ ПАКЕТОВ (NUGET) ----------
+*.nuget.props
+*.nuget.targets
+packages/
+
+## ---------- ЛОГИ И ВРЕМЕННЫЕ ФАЙЛЫ ----------
+*.log
+*.tmp
+*.crash
+
+.secrets.toml
