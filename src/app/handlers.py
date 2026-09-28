@@ -73,7 +73,8 @@ def create_router(
     @router.message(Command("news"))
     async def collect_news(message: Message) -> None:
         try:
-            async with sessions.begin() as session:
+            await message.answer("Начинаю сбор новостей по каналам. Это может занять несколько минут…")
+            async with sessions() as session:
                 users = SqlUserRepository(session)
                 user = await users.get_or_create(message.from_user.id)
                 channels = await SqlUserChannelRepository(session).list_for_user(user.id)
@@ -86,6 +87,7 @@ def create_router(
                     SqlChannelStateRepository(session),
                     SqlDigestQueueRepository(session),
                 )
+                await session.commit()
             await message.answer(f"Дайджест готов: {len(queue.items)} новостей. Используйте /next.")
         except Exception as error:
             await message.answer(f"Не удалось собрать дайджест: {error}")

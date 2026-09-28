@@ -4,19 +4,31 @@ from src.core.services.collector import NewsCollectorService
 
 
 class DigestService:
-    def __init__(self, userbot: UserbotClient, ollama: OllamaClient) -> None:
+    def __init__(
+        self, userbot: UserbotClient, ollama: OllamaClient, initial_history_limit: int = 100
+    ) -> None:
         self.userbot = userbot
         self.ollama = ollama
         self.collector = NewsCollectorService()
+        self.initial_history_limit = initial_history_limit
 
     async def build_queue(self, user_id: int, channels, states, queues) -> DigestQueue:
         messages = []
         updates: list[ChannelState] = []
         for channel in channels:
             state = await states.get(user_id, channel.channel_id)
-            history = await self.userbot.get_history(
-                channel.channel_id, state.last_digest_date if state else None
-            )
+            target = channel.channel_username or channel.channel_id
+            try:
+                history = await self.userbot.get_history(
+                    target,
+                    state.last_digest_date if state else None,
+                    limit=self.initial_history_limit,
+                )
+            except Exception as error:
+                raise RuntimeError(
+                    f"Не удалось прочитать канал «{channel.title}» "
+                    f"({channel.channel_username or channel.channel_id}): {error}"
+                ) from error
             for message in history:
                 message.user_id = user_id
             messages.extend(history)

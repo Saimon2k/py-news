@@ -19,13 +19,16 @@ class TelethonUserbotClient:
             await self.client.disconnect()
 
     async def get_history(
-        self, channel: int | str, offset_date: datetime | None = None
+        self,
+        channel: int | str,
+        offset_date: datetime | None = None,
+        limit: int = 100,
     ) -> list[CollectedMessage]:
         entity = await self.client.get_entity(channel)
         channel_id = int(getattr(entity, "id"))
         result = []
         async for message in self.client.iter_messages(
-            entity, offset_date=offset_date, reverse=True
+            entity, offset_date=offset_date, reverse=True, limit=limit
         ):
             text = message.message or None
             media = bool(message.media)
