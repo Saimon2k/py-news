@@ -1,7 +1,7 @@
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-from sqlalchemy import text
+from sqlalchemy import delete, text
 
-from src.infrastructure.database.models import Base
+from src.infrastructure.database.models import Base, DBDigestItem, DBDigestQueue
 
 
 class Database:
@@ -12,6 +12,9 @@ class Database:
     async def initialize(self) -> None:
         async with self.engine.connect() as connection:
             await connection.execute(text("SELECT 1"))
+        async with self.sessions.begin() as session:
+            await session.execute(delete(DBDigestItem))
+            await session.execute(delete(DBDigestQueue))
 
     async def close(self) -> None:
         await self.engine.dispose()

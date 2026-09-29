@@ -97,7 +97,8 @@ def create_router(
             item = await SqlDigestQueueRepository(session).next_unsent(user.id) if user else None
         if item:
             preview = (item.preview_text or "").strip()
-            text = f"{preview[:3000]}\n\n{item.message_url}"
+            sources = item.source_urls or [item.message_url]
+            text = f"{preview[:3000]}\n\nИсточники:\n" + "\n".join(sources)
             await message.respond(text)
             async with sessions.begin() as session:
                 await SqlDigestQueueRepository(session).mark_sent(item.id)

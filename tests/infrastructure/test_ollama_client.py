@@ -19,13 +19,13 @@ class AsyncClientStub:
 async def test_filter_news_uses_schema_and_discards_unknown_ids() -> None:
     client = OllamaNewsClient("http://ollama", "test-model")
     stub = AsyncClientStub([
-        '{"selected":[{"id":1,"reason":"новость"},{"id":99,"reason":"чужой"}],"ads":[],"duplicates":[]}'
+        '{"selected":[{"id":1,"reason":"новость","summary":"Суммари","source_ids":[1,99]}],"ads":[],"duplicates":[]}'
     ])
     client.client = stub
 
     result = await client.filter_news([{"id": 1, "text": "Новость"}])
 
-    assert result == {"selected": [{"id": 1, "reason": "новость"}], "ads": [], "duplicates": []}
+    assert result == {"selected": [{"id": 1, "reason": "новость", "summary": "Суммари", "source_ids": [1]}], "ads": [], "duplicates": []}
     assert stub.calls[0]["format"] == NewsSelection.model_json_schema()
 
 

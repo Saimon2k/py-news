@@ -5,6 +5,7 @@ from src.core.models import ChannelState, DigestItem, DigestQueue
 from src.core.services.collector import NewsCollectorService
 
 MOSCOW_TZ = timezone(timedelta(hours=3))
+MVP_FALLBACK_LIMIT = 10
 
 
 class DigestService:
@@ -47,7 +48,7 @@ class DigestService:
                     last_message_id=latest.message_id,
                 ))
 
-        unique = [m for m in self.collector.process_and_deduplicate(messages) if m.is_canonical]
+        processed = self.collector.process_and_deduplicate(messages)
         payload = [
             {
                 "id": index,
@@ -56,16 +57,38 @@ class DigestService:
                 "text": message.text or "",
                 "type": message.type.value,
             }
-            for index, message in enumerate(unique)
+            for index, message in enumerate(processed)
         ]
         filtered = await self.ollama.filter_news(payload) if payload else {"selected": []}
         selected = {item["id"]: item for item in filtered.get("selected", [])}
+        if processed and not selected:
+            selected = {
+                index: {"id": index, "reason": "MVP fallback", "summary": "", "source_ids": [index]}
+                for index in range(max(0, len(processed) - MVP_FALLBACK_LIMIT), len(processed))
+            }
         digest_items = []
-        for index, message in enumerate(unique):
+        for index, message in enumerate(processed):
             decision = selected.get(index)
             if decision is None:
                 continue
             channel = next(c for c in channels if c.channel_id == message.channel_id)
+            source_ids = decision.get("source_ids") or [index]
+            source_ids = [
+                source_id for source_id in source_ids
+                if isinstance(source_id, int) and 0 <= source_id < len(processed)
+            ]
+            if index not in source_ids:
+                source_ids.insert(0, index)
+            source_urls = []
+            for source_id in source_ids:
+                source = processed[source_id]
+                source_channel = next(c for c in channels if c.channel_id == source.channel_id)
+                source_username = source_channel.channel_username
+                source_urls.append(
+                    f"https://t.me/{source_username}/{source.message_id}"
+                    if source_username
+                    else f"https://t.me/c/{source.channel_id}/{source.message_id}"
+                )
             username = channel.channel_username
             message_url = (
                 f"https://t.me/{username}/{message.message_id}"
@@ -79,8 +102,9 @@ class DigestService:
                 message_id=message.message_id,
                 message_url=message_url,
                 type=message.type,
-                preview_text=message.text,
+                preview_text=decision.get("summary") or message.text,
                 reason=decision.get("reason"),
+                source_urls=source_urls,
             ))
 
         queue = await queues.create(DigestQueue(user_id=user_id, items=digest_items))

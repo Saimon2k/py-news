@@ -20,7 +20,7 @@ class UserbotStub:
 
 class OllamaStub:
     async def filter_news(self, messages):
-        return {"selected": [{"id": 0, "reason": "новость"}]}
+        return {"selected": [{"id": 0, "reason": "новость", "summary": "Общее суммари", "source_ids": [0, 1]}]}
 
 
 class StateRepositoryStub:
@@ -56,6 +56,11 @@ async def test_build_queue_deduplicates_before_llm_and_tracks_latest_message() -
     assert len(queue.items) == 1
     assert queue.items[0].message_id == 1
     assert queue.items[0].message_url == "https://t.me/news_feed/1"
+    assert queue.items[0].preview_text == "Общее суммари"
+    assert queue.items[0].source_urls == [
+        "https://t.me/news_feed/1",
+        "https://t.me/news_feed/2",
+    ]
     assert states.saved[0].last_message_id == 2
     target, offset_date, limit = userbot.requested[0]
     assert target == "news_feed"
@@ -127,3 +132,32 @@ async def test_build_queue_treats_naive_saved_state_as_utc() -> None:
     await service.build_queue(9, [channel], StateRepositoryWithSavedDate(), QueueRepositoryStub())
 
     assert userbot.requested[0][1] == saved_date.replace(tzinfo=timezone.utc)
+
+
+@pytest.mark.asyncio
+async def test_build_queue_uses_limited_fallback_when_ollama_selects_nothing() -> None:
+    class UserbotWithManyMessages(UserbotStub):
+        async def get_history(self, channel, offset_date=None, limit=100):
+            return [
+                CollectedMessage(
+                    user_id=0,
+                    channel_id=123,
+                    message_id=index,
+                    date=offset_date + timedelta(minutes=index),
+                    text=f"Новость {index}",
+                    type=MessageType.TEXT,
+                )
+                for index in range(12)
+            ]
+
+    class EmptyOllamaStub:
+        async def filter_news(self, messages):
+            return {"selected": []}
+
+    service = DigestService(UserbotWithManyMessages(), EmptyOllamaStub())
+    channel = UserChannel(user_id=9, channel_id=123, title="News")
+
+    queue = await service.build_queue(9, [channel], StateRepositoryStub(), QueueRepositoryStub())
+
+    assert [item.message_id for item in queue.items] == list(range(2, 12))
+    assert {item.reason for item in queue.items} == {"MVP fallback"}

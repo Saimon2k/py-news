@@ -57,6 +57,7 @@ def upgrade() -> None:
         sa.Column("type", sa.Enum("text", "media_with_caption", "media_without_text", name="messagetype"), nullable=False),
         sa.Column("preview_text", sa.String(), nullable=True),
         sa.Column("reason", sa.String(), nullable=True),
+        sa.Column("source_urls", sa.JSON(), nullable=False, server_default="[]"),
         sa.Column("is_sent", sa.Boolean(), nullable=False, server_default=sa.false()),
     )
 

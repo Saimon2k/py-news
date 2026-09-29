@@ -67,6 +67,7 @@ class DigestItem(DomainModel):
     type: MessageType
     preview_text: str | None = None
     reason: str | None = None
+    source_urls: list[str] = Field(default_factory=list)
     is_sent: bool = False
 
 

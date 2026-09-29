@@ -14,6 +14,8 @@ class SelectionItem(BaseModel):
 
     id: int
     reason: str
+    summary: str = ""
+    source_ids: list[int] = Field(default_factory=list)
 
 
 class NewsSelection(BaseModel):
@@ -34,8 +36,10 @@ class OllamaNewsClient:
             return {"selected": [], "ads": [], "duplicates": []}
 
         prompt = (
-            "Отбери реальные новости, исключи рекламу, скам и повторы. "
-            "Верни JSON, строго соответствующий переданной схеме. "
+            "Сгруппируй реальные новости об одном событии, даже если формулировки разные; "
+            "исключи рекламу и скам. Для каждой группы верни один id (каноничная новость), "
+            "краткое суммари только по фактам публикаций и source_ids всех публикаций группы. "
+            "Каждая новость должна попасть не более чем в одну группу. Верни JSON по схеме; "
             "ID должны быть только из входных данных.\n"
             + json.dumps(messages, ensure_ascii=False)
         )
@@ -51,9 +55,17 @@ class OllamaNewsClient:
                 )
                 result = NewsSelection.model_validate_json(response.message.content)
                 valid_ids = {message["id"] for message in messages}
-                selected = [
-                    item.model_dump() for item in result.selected if item.id in valid_ids
-                ]
+                selected = []
+                used_sources: set[int] = set()
+                for item in result.selected:
+                    if item.id not in valid_ids:
+                        continue
+                    source_ids = [source_id for source_id in item.source_ids
+                                  if source_id in valid_ids and source_id not in used_sources]
+                    if not source_ids:
+                        source_ids = [item.id]
+                    used_sources.update(source_ids)
+                    selected.append({**item.model_dump(), "source_ids": source_ids})
                 return {"selected": selected, "ads": result.ads, "duplicates": result.duplicates}
             except (ValidationError, ValueError, TypeError) as error:
                 logger.warning(

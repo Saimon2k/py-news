@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import JSON, Boolean, DateTime, Enum, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 from src.core.models import MessageType, QueueStatus
@@ -72,5 +72,6 @@ class DBDigestItem(Base):
     )
     preview_text: Mapped[str | None] = mapped_column(String, nullable=True)
     reason: Mapped[str | None] = mapped_column(String, nullable=True)
+    source_urls: Mapped[list[str]] = mapped_column(JSON, default=list)
     is_sent: Mapped[bool] = mapped_column(Boolean, default=False)
     queue: Mapped[DBDigestQueue] = relationship(back_populates="items")
