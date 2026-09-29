@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -58,4 +58,8 @@ async def test_build_queue_deduplicates_before_llm_and_tracks_latest_message() -
     assert queue.items[0].message_id == 1
     assert queue.items[0].message_url == "https://t.me/news_feed/1"
     assert states.saved[0].last_message_id == 2
-    assert userbot.requested == [("news_feed", None, 40)]
+    target, offset_date, limit = userbot.requested[0]
+    assert target == "news_feed"
+    assert offset_date.tzinfo == timezone.utc
+    assert offset_date.hour == 15  # 18:00 Moscow is 15:00 UTC.
+    assert limit == 40

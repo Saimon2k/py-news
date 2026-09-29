@@ -1,6 +1,5 @@
 from pathlib import Path
 
-from aiogram import Bot, Dispatcher
 from telethon import TelegramClient, connection
 
 from src.app.settings import Settings
@@ -28,14 +27,19 @@ class AppContainer:
             settings.telegram_api_hash,
             **telethon_options,
         )
+        self.bot_telethon = TelegramClient(
+            f"{settings.telegram_session_path}_bot",
+            settings.telegram_api_id,
+            settings.telegram_api_hash,
+            **telethon_options,
+        )
         self.userbot = TelethonUserbotClient(self.telethon)
         self.auth = UserbotAuthService(self.telethon, settings.telegram_phone)
         self.ollama = OllamaNewsClient(settings.ollama_url, settings.ollama_model)
-        self.bot = Bot(token=settings.telegram_bot_token)
-        self.dispatcher = Dispatcher()
         self.digest_service = DigestService(self.userbot, self.ollama)
 
     async def close(self) -> None:
-        await self.bot.session.close()
+        if self.bot_telethon.is_connected():
+            await self.bot_telethon.disconnect()
         await self.userbot.close()
         await self.database.close()

@@ -1,6 +1,10 @@
+from datetime import datetime, time, timedelta, timezone
+
 from src.core.interfaces.clients import OllamaClient, UserbotClient
 from src.core.models import ChannelState, DigestItem, DigestQueue
 from src.core.services.collector import NewsCollectorService
+
+MOSCOW_TZ = timezone(timedelta(hours=3))
 
 
 class DigestService:
@@ -18,10 +22,11 @@ class DigestService:
         for channel in channels:
             state = await states.get(user_id, channel.channel_id)
             target = channel.channel_username or channel.channel_id
+            offset_date = state.last_digest_date if state else _yesterday_18_moscow()
             try:
                 history = await self.userbot.get_history(
                     target,
-                    state.last_digest_date if state else None,
+                    offset_date,
                     limit=self.initial_history_limit,
                 )
             except Exception as error:
@@ -81,3 +86,9 @@ class DigestService:
         for state in updates:
             await states.save(state)
         return queue
+
+
+def _yesterday_18_moscow() -> datetime:
+    now_moscow = datetime.now(MOSCOW_TZ)
+    yesterday = now_moscow.date() - timedelta(days=1)
+    return datetime.combine(yesterday, time(18), tzinfo=MOSCOW_TZ).astimezone(timezone.utc)

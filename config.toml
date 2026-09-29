@@ -1,4 +1,4 @@
 [default]
-Ollama = { Url = "http://localhost:11434", Model = "llama3.2 " }
+Ollama = { Url = "http://localhost:11434", Model = "llama3.2" }
 Storage = { DatabasePath = "sqlite+aiosqlite:///./news_digest.db" }
 Logging = { Level = "INFO" }

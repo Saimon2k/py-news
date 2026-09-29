@@ -17,10 +17,11 @@ async def run() -> None:
         await app.database.initialize()
         await app.auth.authenticate()
         await app.userbot.start()
-        app.dispatcher.include_router(
-            create_router(app.database.sessions, app.digest_service, app.userbot)
+        await app.bot_telethon.start(bot_token=settings.telegram_bot_token)
+        create_router(
+            app.bot_telethon, app.database.sessions, app.digest_service, app.userbot
         )
-        await app.dispatcher.start_polling(app.bot)
+        await app.bot_telethon.run_until_disconnected()
     finally:
         await app.close()
 
