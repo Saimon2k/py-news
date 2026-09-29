@@ -36,7 +36,11 @@ class AppContainer:
         self.userbot = TelethonUserbotClient(self.telethon)
         self.auth = UserbotAuthService(self.telethon, settings.telegram_phone)
         self.ollama = OllamaNewsClient(settings.ollama_url, settings.ollama_model)
-        self.digest_service = DigestService(self.userbot, self.ollama)
+        self.digest_service = DigestService(
+            self.userbot,
+            self.ollama,
+            initial_history_limit=settings.initial_history_limit,
+        )
 
     async def close(self) -> None:
         if self.bot_telethon.is_connected():

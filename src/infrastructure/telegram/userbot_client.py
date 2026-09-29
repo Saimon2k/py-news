@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from telethon import TelegramClient
@@ -28,8 +28,10 @@ class TelethonUserbotClient:
         channel_id = int(getattr(entity, "id"))
         result = []
         async for message in self.client.iter_messages(
-            entity, offset_date=offset_date, reverse=True, limit=limit
+            entity, limit=limit
         ):
+            if offset_date and message.date < _as_utc(offset_date):
+                continue
             text = message.message or None
             media = bool(message.media)
             kind = MessageType.MEDIA_WITH_CAPTION if media and text else (
@@ -52,3 +54,7 @@ class TelethonUserbotClient:
             "username": getattr(entity, "username", None),
             "title": getattr(entity, "title", None) or getattr(entity, "first_name", target),
         }
+
+
+def _as_utc(value: datetime) -> datetime:
+    return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)

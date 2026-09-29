@@ -3,9 +3,25 @@ from typing import Any
 
 import structlog
 from ollama import AsyncClient
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 
 logger = structlog.get_logger(__name__)
+
+
+class SelectionItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: int
+    reason: str
+
+
+class NewsSelection(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    selected: list[SelectionItem] = Field(default_factory=list)
+    ads: list[int] = Field(default_factory=list)
+    duplicates: list[int] = Field(default_factory=list)
 
 
 class OllamaNewsClient:
@@ -19,35 +35,33 @@ class OllamaNewsClient:
 
         prompt = (
             "Отбери реальные новости, исключи рекламу, скам и повторы. "
-            "Верни JSON вида {\"selected\":[{\"id\":0,\"reason\":\"кратко\"}],"
-            "\"ads\":[],\"duplicates\":[]}. ID должны быть только из входных данных.\n"
+            "Верни JSON, строго соответствующий переданной схеме. "
+            "ID должны быть только из входных данных.\n"
             + json.dumps(messages, ensure_ascii=False)
         )
         for attempt in range(2):
             try:
                 response = await self.client.chat(
                     model=self.model,
-                    format="json",
+                    format=NewsSelection.model_json_schema(),
                     messages=[
                         {"role": "system", "content": "Ты редактор новостного дайджеста. Не выдумывай факты."},
                         {"role": "user", "content": prompt},
                     ],
                 )
-                result = json.loads(response.message.content)
-                if not isinstance(result, dict) or not isinstance(result.get("selected"), list):
-                    raise ValueError("Ollama returned an invalid selection schema")
+                result = NewsSelection.model_validate_json(response.message.content)
                 valid_ids = {message["id"] for message in messages}
-                result["selected"] = [
-                    item for item in result["selected"]
-                    if isinstance(item, dict) and item.get("id") in valid_ids
+                selected = [
+                    item.model_dump() for item in result.selected if item.id in valid_ids
                 ]
-                return result
-            except (ValueError, KeyError, TypeError, json.JSONDecodeError):
-                logger.warning("Invalid response from Ollama", attempt=attempt + 1)
+                return {"selected": selected, "ads": result.ads, "duplicates": result.duplicates}
+            except (ValidationError, ValueError, TypeError) as error:
+                logger.warning(
+                    "Invalid response from Ollama",
+                    attempt=attempt + 1,
+                    error=str(error),
+                    response_length=(len(response.message.content) if "response" in locals() else 0),
+                )
                 if attempt == 1:
-                    return {
-                        "selected": [{"id": item["id"], "reason": "LLM fallback"} for item in messages],
-                        "ads": [],
-                        "duplicates": [],
-                    }
+                    return {"selected": [], "ads": [], "duplicates": []}
         raise RuntimeError("Unreachable Ollama retry state")

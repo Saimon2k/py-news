@@ -11,6 +11,7 @@ class Settings:
     database_url: str
     ollama_url: str
     ollama_model: str
+    initial_history_limit: int
     telegram_api_id: int
     telegram_api_hash: str
     telegram_phone: str
@@ -38,6 +39,7 @@ def load_settings(root: Path | None = None) -> Settings:
         "database_url": env.get("PYNEWS_DATABASE_URL", storage.get("DatabasePath", data.get("DATABASE_URL", "sqlite+aiosqlite:///./news_digest.db"))),
         "ollama_url": env.get("PYNEWS_OLLAMA_URL", ollama.get("Url", "http://localhost:11434")),
         "ollama_model": env.get("PYNEWS_OLLAMA_MODEL", ollama.get("Model", "llama3")),
+        "initial_history_limit": env.get("PYNEWS_INITIAL_HISTORY_LIMIT", data.get("Digest", {}).get("InitialHistoryLimit", 30)),
         "telegram_api_id": env.get("PYNEWS_TELEGRAM_API_ID", telegram.get("ApiId", 0)),
         "telegram_api_hash": env.get("PYNEWS_TELEGRAM_API_HASH", telegram.get("ApiHash", "")),
         "telegram_phone": env.get("PYNEWS_TELEGRAM_PHONE", telegram.get("PhoneNumber", "")),
@@ -55,6 +57,12 @@ def load_settings(root: Path | None = None) -> Settings:
     if isinstance(values["telegram_api_id"], bool):
         raise ValueError("PYNEWS_TELEGRAM_API_ID должен быть числом")
     values["telegram_api_id"] = int(values["telegram_api_id"])
+    try:
+        values["initial_history_limit"] = int(values["initial_history_limit"])
+    except (TypeError, ValueError) as error:
+        raise ValueError("PYNEWS_INITIAL_HISTORY_LIMIT должен быть числом") from error
+    if values["initial_history_limit"] < 1:
+        raise ValueError("PYNEWS_INITIAL_HISTORY_LIMIT должен быть положительным числом")
     return Settings(**values)
 
 

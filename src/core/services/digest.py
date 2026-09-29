@@ -22,7 +22,7 @@ class DigestService:
         for channel in channels:
             state = await states.get(user_id, channel.channel_id)
             target = channel.channel_username or channel.channel_id
-            offset_date = state.last_digest_date if state else _yesterday_18_moscow()
+            offset_date = _as_utc(state.last_digest_date) if state else _yesterday_18_moscow()
             try:
                 history = await self.userbot.get_history(
                     target,
@@ -34,6 +34,7 @@ class DigestService:
                     f"Не удалось прочитать канал «{channel.title}» "
                     f"({channel.channel_username or channel.channel_id}): {error}"
                 ) from error
+            history = [message for message in history if message.date >= offset_date]
             for message in history:
                 message.user_id = user_id
             messages.extend(history)
@@ -92,3 +93,7 @@ def _yesterday_18_moscow() -> datetime:
     now_moscow = datetime.now(MOSCOW_TZ)
     yesterday = now_moscow.date() - timedelta(days=1)
     return datetime.combine(yesterday, time(18), tzinfo=MOSCOW_TZ).astimezone(timezone.utc)
+
+
+def _as_utc(value: datetime) -> datetime:
+    return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
