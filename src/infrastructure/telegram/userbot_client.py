@@ -27,6 +27,7 @@ class TelethonUserbotClient:
         entity = await self.client.get_entity(channel)
         channel_id = int(getattr(entity, "id"))
         result = []
+        # Telegram возвращает историю от новых сообщений к старым; границу дополнительно проверяем локально.
         async for message in self.client.iter_messages(
             entity, limit=limit
         ):
@@ -34,6 +35,7 @@ class TelethonUserbotClient:
                 continue
             text = message.message or None
             media = bool(message.media)
+            # Тип определяется сочетанием наличия вложения и текстовой подписи.
             kind = MessageType.MEDIA_WITH_CAPTION if media and text else (
                 MessageType.MEDIA_WITHOUT_TEXT if media else MessageType.TEXT
             )

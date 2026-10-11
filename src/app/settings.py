@@ -24,6 +24,7 @@ class Settings:
 def load_settings(root: Path | None = None) -> Settings:
     root = root or Path.cwd()
     data: dict[str, Any] = {}
+    # Секреты загружаются после обычной конфигурации и поэтому имеют приоритет.
     for filename in ("config.toml", ".secrets.toml"):
         path = root / filename
         if path.exists():
@@ -35,6 +36,7 @@ def load_settings(root: Path | None = None) -> Settings:
     ollama = data.get("Ollama", {})
     storage = data.get("Storage", {})
     env = os.environ
+    # Переменные окружения переопределяют значения из TOML-файлов.
     values = {
         "database_url": env.get("PYNEWS_DATABASE_URL", storage.get("DatabasePath", data.get("DATABASE_URL", "sqlite+aiosqlite:///./news_digest.db"))),
         "ollama_url": env.get("PYNEWS_OLLAMA_URL", ollama.get("Url", "http://localhost:11434")),
@@ -74,6 +76,7 @@ def _parse_mtproxy(value: str) -> tuple[str, int, str] | None:
         raise ValueError("Telegram Proxy должен быть ссылкой формата tg://proxy?server=...&port=...&secret=...")
     query = parse_qs(parsed.query)
     try:
+        # Telethon принимает прокси как кортеж (адрес, порт, секрет).
         host = query["server"][0]
         port = int(query["port"][0])
         secret = query["secret"][0]

@@ -12,6 +12,7 @@ class UserbotAuthService:
 
     async def authenticate(self) -> None:
         await self.client.connect()
+        # Сохранённая авторизованная сессия позволяет не запрашивать код при каждом запуске.
         if await self.client.is_user_authorized():
             logger.info("Telethon session is authorized")
             return

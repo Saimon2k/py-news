@@ -28,6 +28,7 @@ class SqlUserRepository:
             return user
         row = DBUser(telegram_user_id=telegram_user_id)
         self.session.add(row)
+        # flush выдаёт первичный ключ до завершения общей транзакции.
         await self.session.flush()
         return User.model_validate(row)
 
@@ -145,6 +146,7 @@ class SqlDigestQueueRepository:
                 ).limit(1)
             )
             if remaining is None:
+                # Очередь завершается только после отправки последнего элемента.
                 queue = await self.session.get(DBDigestQueue, row.digest_queue_id)
                 if queue is not None:
                     queue.status = "completed"

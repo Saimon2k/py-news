@@ -11,6 +11,7 @@ depends_on = None
 
 
 def upgrade() -> None:
+    # Ссылки на все публикации одной группы нужны для показа источников в дайджесте.
     op.add_column(
         "digest_items",
         sa.Column("source_urls", sa.JSON(), nullable=False, server_default="[]"),

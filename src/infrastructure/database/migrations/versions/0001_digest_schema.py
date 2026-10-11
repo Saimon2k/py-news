@@ -11,6 +11,7 @@ depends_on = None
 
 
 def upgrade() -> None:
+    # Таблицы создаются в порядке зависимостей: пользователи, подписки и затем очереди.
     op.create_table(
         "users",
         sa.Column("id", sa.Integer(), primary_key=True),

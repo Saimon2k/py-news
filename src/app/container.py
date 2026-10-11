@@ -13,10 +13,12 @@ from src.infrastructure.telegram.userbot_client import TelethonUserbotClient
 class AppContainer:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
+        # Telethon хранит файлы сессий рядом с указанным путём.
         Path(settings.telegram_session_path).parent.mkdir(parents=True, exist_ok=True)
         self.database = Database(settings.database_url)
         telethon_options = {}
         if settings.telegram_proxy:
+            # Один и тот же прокси применяется к пользовательскому и бот-клиенту.
             telethon_options = {
                 "connection": connection.ConnectionTcpMTProxyRandomizedIntermediate,
                 "proxy": settings.telegram_proxy,
@@ -28,6 +30,7 @@ class AppContainer:
             **telethon_options,
         )
         self.bot_telethon = TelegramClient(
+            # Отдельный файл не даёт пользовательской и бот-сессиям конфликтовать.
             f"{settings.telegram_session_path}_bot",
             settings.telegram_api_id,
             settings.telegram_api_hash,
@@ -43,6 +46,7 @@ class AppContainer:
         )
 
     async def close(self) -> None:
+        # Бот-клиент запускается отдельно; userbot закрывает собственный клиент.
         if self.bot_telethon.is_connected():
             await self.bot_telethon.disconnect()
         await self.userbot.close()

@@ -5,6 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class MessageType(StrEnum):
+    # Разделяем текстовые публикации и медиа, чтобы учитывать их в дайджесте явно.
     TEXT = "text"
     MEDIA_WITH_CAPTION = "media_with_caption"
     MEDIA_WITHOUT_TEXT = "media_without_text"
@@ -52,6 +53,7 @@ class CollectedMessage(DomainModel):
     type: MessageType = MessageType.TEXT
     normalized_text: str | None = None
     content_hash: str | None = None
+    # Дубликат сохраняется в данных, но указывает на первое сообщение с тем же содержимым.
     is_canonical: bool = True
     duplicate_of_message_id: int | None = None
 

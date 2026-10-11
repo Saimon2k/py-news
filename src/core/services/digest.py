@@ -23,6 +23,7 @@ class DigestService:
         for channel in channels:
             state = await states.get(user_id, channel.channel_id)
             target = channel.channel_username or channel.channel_id
+            # Для первого запуска берём публикации со вчерашних 18:00 по Москве.
             offset_date = _as_utc(state.last_digest_date) if state else _yesterday_18_moscow()
             try:
                 history = await self.userbot.get_history(
@@ -48,6 +49,7 @@ class DigestService:
                     last_message_id=latest.message_id,
                 ))
 
+        # Сначала устраняем повторы, чтобы модель получала меньше дублирующих публикаций.
         processed = self.collector.process_and_deduplicate(messages)
         payload = [
             {
@@ -62,6 +64,7 @@ class DigestService:
         filtered = await self.ollama.filter_news(payload) if payload else {"selected": []}
         selected = {item["id"]: item for item in filtered.get("selected", [])}
         if processed and not selected:
+            # Если модель не вернула подходящих новостей, оставляем ограниченный запасной список.
             selected = {
                 index: {"id": index, "reason": "MVP fallback", "summary": "", "source_ids": [index]}
                 for index in range(max(0, len(processed) - MVP_FALLBACK_LIMIT), len(processed))
@@ -73,6 +76,7 @@ class DigestService:
                 continue
             channel = next(c for c in channels if c.channel_id == message.channel_id)
             source_ids = decision.get("source_ids") or [index]
+            # Принимаем только допустимые индексы, возвращённые моделью.
             source_ids = [
                 source_id for source_id in source_ids
                 if isinstance(source_id, int) and 0 <= source_id < len(processed)
@@ -114,10 +118,12 @@ class DigestService:
 
 
 def _yesterday_18_moscow() -> datetime:
+    # Граница сбора задаётся по Москве, а в хранилище передаётся в UTC.
     now_moscow = datetime.now(MOSCOW_TZ)
     yesterday = now_moscow.date() - timedelta(days=1)
     return datetime.combine(yesterday, time(18), tzinfo=MOSCOW_TZ).astimezone(timezone.utc)
 
 
 def _as_utc(value: datetime) -> datetime:
+    # Старые значения без часового пояса трактуем как UTC для совместимости с БД.
     return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)

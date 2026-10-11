@@ -13,6 +13,7 @@ class NewsCollectorService:
         if not text:
             return ""
 
+        # Приводим текст к единой форме, чтобы регистр, ссылки и пунктуация не мешали поиску копий.
         text = unicodedata.normalize("NFKC", text).casefold()
         text = re.sub(r"(?:https?://|www\.)\S+", " ", text)
         text = "".join(
@@ -36,6 +37,7 @@ class NewsCollectorService:
         processed: list[CollectedMessage] = []
 
         for message in sorted(messages, key=lambda item: item.date):
+            # Самая ранняя публикация становится канонической для одинакового текста.
             message.is_canonical = True
             message.duplicate_of_message_id = None
 

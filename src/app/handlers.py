@@ -33,6 +33,7 @@ def create_router(
             return
         try:
             info = await userbot.resolve_channel_peer(args[1])
+            # Единая транзакция связывает пользователя и добавленный им канал.
             async with sessions.begin() as session:
                 users = SqlUserRepository(session)
                 user = await users.get_or_create(message.sender_id)
@@ -72,6 +73,7 @@ def create_router(
     async def collect_news(message) -> None:
         try:
             await message.respond("Начинаю сбор новостей по каналам. Это может занять несколько минут…")
+            # Построение очереди и курсоров каналов фиксируется одной транзакцией.
             async with sessions() as session:
                 users = SqlUserRepository(session)
                 user = await users.get_or_create(message.sender_id)
@@ -92,6 +94,7 @@ def create_router(
 
     @bot.on(events.NewMessage(pattern=r"^/next(?:\s|$)"))
     async def next_news(message) -> None:
+        # Сначала читаем элемент, затем отправляем его вне транзакции, чтобы не держать БД открытой.
         async with sessions.begin() as session:
             user = await SqlUserRepository(session).get_by_telegram_id(message.sender_id)
             item = await SqlDigestQueueRepository(session).next_unsent(user.id) if user else None
@@ -100,6 +103,7 @@ def create_router(
             sources = item.source_urls or [item.message_url]
             text = f"{preview[:3000]}\n\nИсточники:\n" + "\n".join(sources)
             await message.respond(text)
+            # Помечаем новость отправленной только после успешного ответа Telegram.
             async with sessions.begin() as session:
                 await SqlDigestQueueRepository(session).mark_sent(item.id)
         else:

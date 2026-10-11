@@ -43,6 +43,7 @@ class OllamaNewsClient:
             "ID должны быть только из входных данных.\n"
             + json.dumps(messages, ensure_ascii=False)
         )
+        # Делаем две попытки; ниже ответ проверяется схемой и очищается от неизвестных ID.
         for attempt in range(2):
             try:
                 response = await self.client.chat(
@@ -60,6 +61,7 @@ class OllamaNewsClient:
                 for item in result.selected:
                     if item.id not in valid_ids:
                         continue
+                    # Источник может принадлежать только одной группе и обязан быть во входных данных.
                     source_ids = [source_id for source_id in item.source_ids
                                   if source_id in valid_ids and source_id not in used_sources]
                     if not source_ids:

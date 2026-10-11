@@ -12,6 +12,7 @@ class Database:
     async def initialize(self) -> None:
         async with self.engine.connect() as connection:
             await connection.execute(text("SELECT 1"))
+        # При перезапуске пересобираем временные дайджесты, сохраняя пользователей и подписки.
         async with self.sessions.begin() as session:
             await session.execute(delete(DBDigestItem))
             await session.execute(delete(DBDigestQueue))
